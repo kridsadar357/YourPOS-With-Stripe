@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>POS Payment Display</title>
+    <meta name="theme-color" content="#1e293b">
+    
+    <!-- iOS support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Fuel Pay">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3135/3135679.png">
+
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        :root {
+            --edc-bg: #121212;
+            --edc-surface: #1e1e1e;
+            --edc-primary: #1a73e8;
+            --edc-success: #00c853;
+            --edc-error: #ff5252;
+            --edc-text-primary: #ffffff;
+            --edc-text-secondary: #b0b0b0;
+            --edc-glass: rgba(255, 255, 255, 0.05);
+            --edc-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--edc-bg);
+            color: var(--edc-text-primary);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* DEVICE FRAME (Subtle) */
+        .device-container {
+            width: 100%;
+            height: 100%;
+            max-width: 480px;
+            background: var(--edc-bg);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* STATUS BAR - EDC LOOK */
+        .status-bar {
+            height: 32px;
+            padding: 0 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            font-weight: 600;
+            background: var(--edc-bg);
+            color: var(--edc-text-primary);
+            z-index: 100;
+        }
+
+        .status-icons {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .signal-icon { display: flex; gap: 2px; align-items: flex-end; height: 12px; }
+        .signal-bar { width: 3px; background: var(--edc-text-secondary); border-radius: 1px; }
+        .signal-bar:nth-child(1) { height: 40%; }
+        .signal-bar:nth-child(2) { height: 60%; }
+        .signal-bar:nth-child(3) { height: 80%; }
+        .signal-bar:nth-child(4) { height: 100%; background: var(--edc-text-primary); }
+
+        .battery-icon {
+            width: 22px;
+            height: 11px;
+            border: 1.5px solid var(--edc-text-secondary);
+            border-radius: 2px;
+            position: relative;
+            padding: 1px;
+        }
+        .battery-icon::after {
+            content: '';
+            position: absolute;
+            right: -3.5px;
+            top: 2px;
+            width: 2px;
+            height: 4px;
+            background: var(--edc-text-secondary);
+            border-radius: 0 1px 1px 0;
+        }
+        .battery-level {
+            width: 85%;
+            height: 100%;
+            background: var(--edc-text-primary);
+            border-radius: 0.5px;
+        }
+
+        /* CONFIG BUTTON (Discrete) */
+        .config-trigger {
+            position: absolute;
+            top: 40px;
+            right: 16px;
+            width: 40px;
+            height: 40px;
+            z-index: 90;
+            opacity: 0.05;
+        }
+
+        /* SCREENS */
+        .screen {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            position: relative;
+            animation: screenFade 0.3s ease;
+        }
+
+        @keyframes screenFade {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        /* IDLE SCREEN */
+        .brand-logo {
+            font-size: 64px;
+            margin-bottom: 24px;
+            filter: drop-shadow(0 0 20px rgba(26, 115, 232, 0.3));
+        }
+
+        .brand-name {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin-bottom: 4px;
+        }
+
+        .brand-status {
+            font-size: 16px;
+            color: var(--edc-text-secondary);
+            margin-bottom: 40px;
+        }
+
+        .system-info-card {
+            background: var(--edc-surface);
+            border: 1px solid var(--edc-border);
+            border-radius: 16px;
+            padding: 16px 24px;
+            width: 100%;
+            max-width: 280px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+        }
+
+        .info-label { color: var(--edc-text-secondary); }
+        .info-value { font-weight: 600; color: var(--edc-text-primary); }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--edc-error);
+            box-shadow: 0 0 8px var(--edc-error);
+        }
+
+        .status-dot.connected {
+            background: var(--edc-success);
+            box-shadow: 0 0 8px var(--edc-success);
+        }
+
+        /* PAYMENT SCREEN */
+        .payment-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .amount-display {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .label-premium {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--edc-text-secondary);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .val-amount {
+            font-size: 56px;
+            font-weight: 800;
+            letter-spacing: -2px;
+            line-height: 1;
+        }
+
+        .val-currency {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--edc-primary);
+            margin-left: 4px;
+        }
+
+        .qr-frame {
+            background: white;
+            padding: 12px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            margin-bottom: 32px;
+            transform: scale(1);
+            transition: transform 0.3s ease;
+        }
+
+        #qr-img {
+            display: block;
+            width: 240px;
+            height: 240px;
+            border-radius: 8px;
+        }
+
+        .instruction-bar {
+            background: var(--edc-surface);
+            border: 1px solid var(--edc-border);
+            padding: 16px;
+            border-radius: 12px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .inst-th { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
+        .inst-en { font-size: 14px; color: var(--edc-text-secondary); }
+
+        /* SUCCESS SCREEN */
+        .success-checkmark {
+            width: 96px;
+            height: 96px;
+            background: rgba(0, 200, 83, 0.15);
+            border: 3px solid var(--edc-success);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 48px;
+            color: var(--edc-success);
+            margin-bottom: 32px;
+            box-shadow: 0 0 40px rgba(0, 200, 83, 0.2);
+        }
+
+        .success-text {
+            text-align: center;
+        }
+
+        .success-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .receipt-card {
+            margin-top: 32px;
+            background: var(--edc-surface);
+            border-radius: 12px;
+            width: 100%;
+            padding: 20px;
+            border-top: 4px solid var(--edc-success);
+        }
+
+        /* MODAL */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+        }
+
+        .modal.active { display: flex; }
+
+        .modal-body {
+            background: var(--edc-surface);
+            width: 100%;
+            max-width: 320px;
+            padding: 24px;
+            border-radius: 20px;
+            border: 1px solid var(--edc-border);
+        }
+
+        .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+
+        input {
+            width: 100%;
+            padding: 14px;
+            background: #000;
+            border: 1px solid var(--edc-border);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 16px;
+            margin-bottom: 16px;
+            outline: none;
+        }
+
+        .btn-action {
+            width: 100%;
+            padding: 14px;
+            background: var(--edc-primary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div class="device-container">
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div id="status-time">12:00</div>
+            <div class="status-icons">
+                <div class="signal-icon">
+                    <div class="signal-bar"></div>
+                    <div class="signal-bar"></div>
+                    <div class="signal-bar"></div>
+                    <div class="signal-bar"></div>
+                </div>
+                <div class="battery-icon">
+                    <div class="battery-level"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="config-trigger" id="config-trigger"></div>
+
+        <!-- IDLE SCREEN -->
+        <div id="screen-idle" class="screen active">
+            <div class="brand-logo">⛽</div>
+            <div class="brand-name">FUEL POS</div>
+            <div class="brand-status">System Ready</div>
+
+            <div class="system-info-card">
+                <div class="info-row">
+                    <span class="info-label">Terminal ID</span>
+                    <span class="info-value" id="disp-tid">Display-1</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Version</span>
+                    <span class="info-value">2.4.0</span>
+                </div>
+                <div class="connection-status">
+                    <div class="status-dot" id="status-dot"></div>
+                    <span id="status-text">Disconnected</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAYMENT SCREEN -->
+        <div id="screen-payment" class="screen">
+            <div class="payment-container">
+                <div class="amount-display">
+                    <div class="label-premium">Incoming Payment</div>
+                    <div>
+                        <span class="val-amount" id="pay-amt">0.00</span>
+                        <span class="val-currency">THB</span>
+                    </div>
+                </div>
+
+                <div class="qr-frame">
+                    <img id="qr-img" alt="QR Code" />
+                </div>
+
+                <div class="instruction-bar">
+                    <div class="inst-th">สแกนเพื่อชำระเงิน</div>
+                    <div class="inst-en">Scan to complete payment</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SUCCESS SCREEN -->
+        <div id="screen-success" class="screen">
+            <div class="success-checkmark">✓</div>
+            <div class="success-text">
+                <div class="success-title">Payment Approved</div>
+                <div style="color: var(--edc-text-secondary); font-size: 14px;">Transaction Successful</div>
+            </div>
+
+            <div class="receipt-card">
+                <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Total Paid</span>
+                    <span class="info-value" id="succ-amt" style="color: var(--edc-success); font-size: 18px;">0.00 THB</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Ref No.</span>
+                    <span class="info-value">TRX-772910</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Config Modal -->
+        <div class="modal" id="config-modal">
+            <div class="modal-body">
+                <div class="modal-title">Terminal Setup</div>
+                <input type="text" id="input-tid" placeholder="Terminal ID" />
+                <button class="btn-action" id="btn-save" style="margin-bottom: 8px;">Confirm & Save</button>
+                <button class="btn-action" id="btn-fs" style="margin-bottom: 8px; background: #333;">Enter Fullscreen Mode ⛶</button>
+                <button class="btn-action" style="background: transparent; border: 1px solid var(--edc-border);" onclick="document.getElementById('config-modal').classList.remove('active')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // UI Elements
+        const screens = {
+            idle: document.getElementById('screen-idle'),
+            payment: document.getElementById('screen-payment'),
+            success: document.getElementById('screen-success')
+        };
+        const tidDisp = document.getElementById('disp-tid');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const timeDisp = document.getElementById('status-time');
+        const payAmt = document.getElementById('pay-amt');
+        const succAmt = document.getElementById('succ-amt');
+        const qrImg = document.getElementById('qr-img');
+
+        // Config Elements
+        const configModal = document.getElementById('config-modal');
+        const configTrigger = document.getElementById('config-trigger');
+        const inputTid = document.getElementById('input-tid');
+        const btnSave = document.getElementById('btn-save');
+        const btnFs = document.getElementById('btn-fs');
+
+        let terminalId = localStorage.getItem('pos_display_terminal_id');
+        if (!terminalId) {
+            const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+            terminalId = `Display-${randomSuffix}`;
+            localStorage.setItem('pos_display_terminal_id', terminalId);
+        }
+        let eventSource = null;
+        let reconnectTimer = null;
+
+        // Init
+        tidDisp.textContent = terminalId;
+        inputTid.value = terminalId;
+
+        // Clock Update
+        function updateClock() {
+            const now = new Date();
+            timeDisp.textContent = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Config Logic (Secret tap)
+        configTrigger.addEventListener('click', () => configModal.classList.add('active'));
+        btnSave.addEventListener('click', () => {
+            const newId = inputTid.value.trim() || 'Display-1';
+            localStorage.setItem('pos_display_terminal_id', newId);
+            terminalId = newId;
+            tidDisp.textContent = terminalId;
+            configModal.classList.remove('active');
+            connect();
+        });
+
+        btnFs.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    alert(`Error enabling fullscreen: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+            configModal.classList.remove('active');
+        });
+
+        function showScreen(key) {
+            Object.keys(screens).forEach(k => screens[k].classList.toggle('active', k === key));
+        }
+
+        function setStatus(connected) {
+            statusDot.classList.toggle('connected', connected);
+            statusText.textContent = connected ? 'Online' : 'Reconnecting...';
+        }
+
+        function generateQR(url) {
+            try {
+                const qr = new QRious({
+                    value: url,
+                    size: 400,
+                    background: '#ffffff',
+                    foreground: '#000000',
+                    level: 'H'
+                });
+                qrImg.src = qr.toDataURL('image/png');
+            } catch (err) { console.error('QR Error:', err); }
+        }
+
+        function connect() {
+            if (eventSource) eventSource.close();
+            
+            const baseUrl = window.location.origin;
+            eventSource = new EventSource(`${baseUrl}/api/payment-display/events?terminalId=${encodeURIComponent(terminalId)}`);
+
+            eventSource.onopen = () => {
+                setStatus(true);
+                if (reconnectTimer) clearTimeout(reconnectTimer);
+            };
+
+            eventSource.addEventListener('payment_pending', (e) => {
+                const data = JSON.parse(e.data);
+                payAmt.textContent = parseFloat(data.amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+                generateQR(data.url);
+                showScreen('payment');
+            });
+
+            eventSource.addEventListener('payment_success', (e) => {
+                const data = JSON.parse(e.data);
+                succAmt.textContent = parseFloat(data.amount).toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' THB';
+                showScreen('success');
+                setTimeout(() => showScreen('idle'), 6000);
+            });
+
+            eventSource.addEventListener('payment_clear', () => showScreen('idle'));
+
+            eventSource.onerror = () => {
+                setStatus(false);
+                eventSource.close();
+                reconnectTimer = setTimeout(connect, 3000);
+            };
+        }
+
+        // Start
+        connect();
+
+        // Screen Wake Lock
+        if ('wakeLock' in navigator) {
+            navigator.wakeLock.request('screen').catch(() => {});
+        }
+    </script>
+</body>
+
+</html>
